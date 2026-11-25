@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "webex-triage-bot"
+version = "0.1.0"
+description = "Webex chat bot that suggests fixes for SRE issues from team rules and learns from feedback"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Satya Prakash Chelluri" }]
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+triage-bot = "triage_bot.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

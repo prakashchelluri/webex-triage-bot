@@ -1,0 +1,99 @@
+# Example team rules for Kubernetes / OpenShift issues.
+# Each rule: id, category, keywords and/or patterns (regex, case-insensitive),
+# fix (proposed action), optional runbook URL, optional weight (default 1.0).
+rules:
+  - id: crashloop-backoff
+    category: workload
+    keywords: [CrashLoopBackOff]
+    patterns:
+      - 'back-?off restarting failed container'
+      - 'restart(s|ed)? \d{2,}'
+    fix: >
+      Read the previous container's logs (kubectl logs <pod> --previous) and the pod
+      events. Usual causes are a bad config/secret, a failing dependency at startup,
+      or a liveness probe that fires before the app is ready (raise initialDelaySeconds
+      or add a startupProbe).
+    runbook: https://runbooks.example.com/k8s/crashloopbackoff
+
+  - id: image-pull-backoff
+    category: workload
+    keywords: [ImagePullBackOff, ErrImagePull]
+    patterns:
+      - 'manifest (for .+ )?(not found|unknown)'
+      - 'pull access denied'
+      - 'unauthorized: authentication required'
+    fix: >
+      Check the image name and tag exist in the registry, then the pull secret
+      (imagePullSecrets on the pod or service account). For "unauthorized", recreate
+      the docker-registry secret; for "not found", fix the tag in the deployment.
+    runbook: https://runbooks.example.com/k8s/imagepullbackoff
+
+  - id: etcd-slow
+    category: control-plane
+    keywords: [etcdserver]
+    patterns:
+      - 'etcd.*(timed? ?out|timeout|slow)'
+      - 'apply request took too long'
+      - 'wal_fsync_duration'
+      - 'leader changed'
+    fix: >
+      etcd is latency-sensitive to disk. Check wal_fsync and backend_commit duration
+      histograms (p99 should stay under ~10ms / ~25ms), confirm etcd is on SSD with
+      enough IOPS, and look for noisy neighbours writing to the same disk. Defragment
+      if the DB size is close to its quota.
+    runbook: https://runbooks.example.com/k8s/etcd-latency
+    weight: 1.2
+
+  - id: node-disk-pressure
+    category: node
+    keywords: [DiskPressure]
+    patterns:
+      - 'evict(ed|ing).*ephemeral-storage'
+      - 'nodefs\.available'
+      - 'imagefs\.available'
+    fix: >
+      Find what fills the node (container logs, unused images, emptyDir volumes).
+      Prune images with crictl rmi --prune, make sure log rotation is configured, and
+      set ephemeral-storage requests/limits on noisy workloads.
+    runbook: https://runbooks.example.com/k8s/disk-pressure
+
+  - id: oom-killed
+    category: workload
+    keywords: [OOMKilled]
+    patterns:
+      - 'exit code:? 137'
+      - 'out of memory'
+      - 'memory cgroup out of memory'
+    fix: >
+      The container exceeded its memory limit. Compare actual usage
+      (container_memory_working_set_bytes) with the limit; raise the limit if usage
+      is legitimate, otherwise look for a leak. For JVMs, align -Xmx /
+      MaxRAMPercentage with the container limit.
+    runbook: https://runbooks.example.com/k8s/oomkilled
+
+  - id: certificate-expiry
+    category: security
+    keywords: [x509]
+    patterns:
+      - 'certificate (has )?expired'
+      - 'certificate is not yet valid'
+      - 'cert(ificate)?s? (will )?expir'
+    fix: >
+      Identify which certificate expired (openssl s_client -connect host:443 | openssl
+      x509 -noout -dates). Renew it (cert-manager, or approve pending CSRs for kubelet
+      certs on OpenShift: oc get csr), then restart components that cache it.
+    runbook: https://runbooks.example.com/k8s/certificate-expiry
+
+  - id: pvc-pending
+    category: storage
+    keywords: [ProvisioningFailed, WaitForFirstConsumer]
+    patterns:
+      - 'pvc.*pending'
+      - 'persistentvolumeclaim.*pending'
+      - 'no persistent volumes available'
+      - 'storageclass.*not found'
+    fix: >
+      Describe the PVC to read its events. Check the storageClassName exists and has a
+      working provisioner, that the requested size/access mode is supported, and for
+      WaitForFirstConsumer that a pod actually uses the claim.
+    runbook: https://runbooks.example.com/k8s/pvc-pending
